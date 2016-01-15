@@ -1,0 +1,14 @@
+{
+  "name": "g1k/yii2-direct-api",
+  "description": "Yii2 Api Direct library",
+  "type": "yii2-extension",
+  "require": {
+    "php": ">=5.4.0",
+    "yiisoft/yii2": "^2.0.6"
+  },
+  "autoload": {
+       "psr-0": {
+          "g1k\\direct": "src/",
+       }
+  },
+}
