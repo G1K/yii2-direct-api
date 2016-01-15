@@ -1,7 +1,13 @@
 <?php
+namespace g1k\direct;
+
+use yii\base\Component;
+use Yii;
+
 /**
  * Компонент для работы с API Yandex.Direct
  * @author Alexey Salnikov <me@iamsalnikov.ru>
+ * @author Alexandr Sidorov <mr@g1k.ru>
  *
  * @method archiveCampaign($param = array())
  * @method createOrUpdateCampaign($param = array())
@@ -58,21 +64,20 @@
  * @method getVersion()
  * @method pingAPI()
  */
-
-class YiiDirectApi extends CApplicationComponent
+class DirectApi extends Component
 {
 
     /**
      * Id приложения
-     * @var string $id
+     * @var string $clientId
      */
-    public $id;
+    public $clientId;
 
     /**
      * Пароль приложения
      * @var string
      */
-    public $password;
+    public $clientSecret;
 
     /**
      * Тип ответа от сервера Яндекса
@@ -112,6 +117,12 @@ class YiiDirectApi extends CApplicationComponent
     private $_token;
 
     /**
+     * Здесь хранится данные если они получены
+     * @var array
+     */
+    private $_data;
+
+    /**
      * Здесь хранится код ошибки, если она произошла
      * @var string
      */
@@ -136,6 +147,14 @@ class YiiDirectApi extends CApplicationComponent
     private $_login;
 
     /**
+     * Включить отладку
+     * @var bool
+     */
+    private $debug = 0;
+
+    private $time;
+
+    /**
      * Curl
      * @var Curl
      */
@@ -143,7 +162,7 @@ class YiiDirectApi extends CApplicationComponent
     private $_curlOptions = array(
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_AUTOREFERER    => true,
+        CURLOPT_AUTOREFERER => true,
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:5.0) Gecko/20110619 Firefox/5.0',
@@ -159,8 +178,8 @@ class YiiDirectApi extends CApplicationComponent
 
     const AUTHORIZE_URL = 'https://oauth.yandex.ru/authorize';
     const TOKEN_URL = 'https://oauth.yandex.ru/token';
-    const JSON_API_URL = 'https://api.direct.yandex.ru/v4/json/';
-    const SANDBOX_JSON_API_URL = 'https://api-sandbox.direct.yandex.ru/json-api/v4/';
+    const JSON_API_URL = 'https://api.direct.yandex.ru/live/v4/json/';
+    const SANDBOX_JSON_API_URL = 'https://api-sandbox.direct.yandex.ru/live/v4/json/';
 
     public function init()
     {
@@ -173,13 +192,13 @@ class YiiDirectApi extends CApplicationComponent
 
         # Установим строку для авторизации
         $this->_authorizeLink = self::AUTHORIZE_URL . '?' . http_build_query(array(
-            'response_type' => $this->responseType,
-            'client_id' => $this->id,
-        ));
+                'response_type' => $this->responseType,
+                'client_id' => $this->clientId,
+            ));
 
         # Если язык не установлен, тогда возьмем его из установок приложения
         if (!$this->locale) {
-            $this->locale = Yii::app()->language;
+            $this->locale = Yii::$app->language;
         }
     }
 
@@ -205,20 +224,20 @@ class YiiDirectApi extends CApplicationComponent
         $this->clearErrors();
         $this->_code = $code;
 
-        $result = Yii::app()->curl->post(self::TOKEN_URL, array(
+        $result = Yii::$app->curl->post(self::TOKEN_URL, array(
             'grant_type' => 'authorization_code',
             'code' => $this->_code,
-            'client_id' => $this->id,
-            'client_secret' => $this->password
+            'client_id' => $this->clientId,
+            'client_secret' => $this->clientSecret
         ));
 
-        $result = CJSON::decode($result);
+        $result = json_decode($result);
 
         # Если все прошло без ошибки
-        if (empty($result['error'])) {
-            $this->_token = $result['access_token'];
+        if (empty($result->error)) {
+            $this->_token = $result->access_token;
         } else {
-            $this->_error = $result['error'];
+            $this->_error = $result->error;
         }
 
         return $this->_token;
@@ -232,6 +251,35 @@ class YiiDirectApi extends CApplicationComponent
     public function setToken($token)
     {
         $this->_token = $token;
+        return $this;
+    }
+
+    /**
+     * Получение url api
+     * return null|string
+     */
+    public function getApiUrl()
+    {
+        return $this->_apiUrl;
+    }
+
+    /**
+     * Получение данных
+     * return null|array
+     */
+    public function getData()
+    {
+        return $this->_data;
+    }
+
+    /**
+     * Установка данных
+     * @param $data
+     * @return $this
+     */
+    public function setData($data)
+    {
+        $this->_data = $data;
         return $this;
     }
 
@@ -276,26 +324,6 @@ class YiiDirectApi extends CApplicationComponent
     }
 
     /**
-     * Установка информации об ошибке
-     * @param string $errorDetail
-     * @return $this
-     */
-    public function setErrorDetail($errorDetail)
-    {
-        $this->_errorDetail = $errorDetail;
-        return $this;
-    }
-
-    /**
-     * Получение информации об ошибке
-     * @return string
-     */
-    public function getErrorDetail()
-    {
-        return $this->_errorDetail;
-    }
-
-    /**
      * Установка заголовка ошибки
      * @param string $errorStr
      * @return $this
@@ -313,6 +341,15 @@ class YiiDirectApi extends CApplicationComponent
     public function getErrorStr()
     {
         return $this->_errorStr;
+    }
+
+    /**
+     * Получение всю информацию о ошибке
+     * @return string
+     */
+    public function getErrorFull()
+    {
+        return $this->_error . ' ' . $this->_errorStr . ' ' . $this->_errorDetail;
     }
 
     /**
@@ -339,7 +376,6 @@ class YiiDirectApi extends CApplicationComponent
             throw new CException(curl_error($this->_ch));
             $c = false;
         }
-
         return $c;
     }
 
@@ -356,25 +392,38 @@ class YiiDirectApi extends CApplicationComponent
             'method' => $method,
             'param' => $params,
             'locale' => $this->locale,
-            'login' => $this->_login,
-            'application_id' => $this->id,
+            'application_id' => $this->clientId,
             'token' => $this->_token
         );
-
         $params = $this->utf8($params);
-        $params = CJSON::encode($params);
-        $result = $this->_execCurl($params);
-        $result = CJSON::decode($result);
+        $params = json_encode($params);
 
-        # Если все прошло без ошибок
-        if (!empty($result)) {
-            if (isset($result['error_code']) && isset($result['error_str'])) {
-                $this->setError($result['error_code'])->setErrorStr($result['error_str']);
+        if ((int)$this->debug == 1)
+            $this->time = microtime(true);
+
+        $result = $this->_execCurl($params);
+        $result = json_decode($result);
+
+        if (!$result) {
+            $error = 'Не удается открыть адрес: ' . $this->getApiUrl() . ". (" . $params . ')' . ' Логин: ' . $this->getLogin();
+            throw new \Exception($error);
+        } else if (!empty($result)) {
+            if (isset($result->error_code) && isset($result->error_str)) {
+                $this->setError($result->error_code)->setErrorStr($result->error_str);
+                if ($result->error_str != 'Нет статистики для данной кампании' && in_array($result->error_code, [53, 54, 58, 510, 251, 513])) {
+                    $error = "Запрос {$method}: " . $this->ErrorFull . (!empty($this->login) ? ' ' . $this->login . '.' : '');
+                    throw new \Exception($error);
+                }
                 $result = false;
             }
-            if (!empty($result['error_detail']))
-                $this->setErrorDetail($result['error_detail']);
         }
+
+        if ((int)$this->debug == 1) {
+            $error = 'Запрос Яндекс.Директ API.' . $method . ': ' . round(microtime(true) - $this->time, 4) . ' сек.';
+            throw new \Exception($error);
+        }
+
+        $this->setData($result->data);
 
         return $result;
     }
@@ -384,12 +433,12 @@ class YiiDirectApi extends CApplicationComponent
      * @param $struct
      * @return mixed
      */
-    public function utf8($struct) {
+    public function utf8($struct)
+    {
         foreach ($struct as $key => $value) {
             if (is_array($value)) {
                 $struct[$key] = $this->utf8($value);
-            }
-            elseif (is_string($value)) {
+            } elseif (is_string($value)) {
                 $struct[$key] = utf8_encode($value);
             }
         }
