@@ -1,5 +1,5 @@
 {
-  "name": "G1K/yii2-direct-api",
+  "name": "g1k/yii2-direct-api",
   "description": "Yii2 Api Direct library",
   "type": "yii2-extension",
   "require": {
