@@ -1,5 +1,5 @@
 {
-  "name": "g1k/yii2-direct-api",
+  "name": "G1K/yii2-direct-api",
   "description": "Yii2 Api Direct library",
   "type": "yii2-extension",
   "require": {
@@ -8,7 +8,7 @@
   },
   "autoload": {
        "psr-0": {
-          "g1k\\direct": "src/",
+          "g1k\\direct": "src/"
        }
-  },
+  }
 }
