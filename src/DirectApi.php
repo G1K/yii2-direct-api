@@ -1,71 +1,77 @@
 <?php
 namespace g1k\direct;
 
-use yii\base\Component;
 use Yii;
+use yii\helpers\Json;
+use yii\base\Component;
 
 /**
  * Компонент для работы с API Yandex.Direct
  * @author Alexey Salnikov <me@iamsalnikov.ru>
  * @author Alexandr Sidorov <mr@g1k.ru>
  *
- * @method archiveCampaign($param = array())
- * @method createOrUpdateCampaign($param = array())
- * @method deleteCampaign($param = array())
- * @method getCampaignParams($param = array())
- * @method getCampaignsList($param = array())
- * @method getCampaignsListFilter($param = array())
- * @method getCampaignsParams($param = array())
- * @method resumeCampaign($param = array())
- * @method stopCampaign($param = array())
- * @method unArchiveCampaign($param = array())
+ * @method archiveCampaign($param = [])
+ * @method createOrUpdateCampaign($param = [])
+ * @method deleteCampaign($param = [])
+ * @method getCampaignParams($param = [])
+ * @method getCampaignsList($param = [])
+ * @method getCampaignsListFilter($param = [])
+ * @method getCampaignsParams($param = [])
+ * @method resumeCampaign($param = [])
+ * @method stopCampaign($param = [])
+ * @method unArchiveCampaign($param = [])
  *
- * @method archiveBanners($param = array())
- * @method createOrUpdateBanners($param = array())
- * @method deleteBanners($param = array())
- * @method getBanners($param = array())
- * @method getBannerPhrases($param = array())
- * @method getBannerPhrasesFilter($param = array())
- * @method moderateBanners($param = array())
- * @method resumeBanners($param = array())
- * @method stopBanners($param = array())
- * @method unArchiveBanners($param = array())
+ * @method archiveBanners($param = [])
+ * @method createOrUpdateBanners($param = [])
+ * @method deleteBanners($param = [])
+ * @method getBanners($param = [])
+ * @method getBannerPhrases($param = [])
+ * @method getBannerPhrasesFilter($param = [])
+ * @method moderateBanners($param = [])
+ * @method resumeBanners($param = [])
+ * @method stopBanners($param = [])
+ * @method unArchiveBanners($param = [])
  *
- * @method setAutoPrice($param = array())
- * @method updatePrices($param = array())
+ * @method setAutoPrice($param = [])
+ * @method updatePrices($param = [])
  *
- * @method getBalance($param = array())
- * @method getSummaryStat($param = array())
- * @method createNewReport($param = array())
- * @method deleteReport($param = array())
+ * @method getBalance($param = [])
+ * @method getSummaryStat($param = [])
+ * @method createNewReport($param = [])
+ * @method deleteReport($param = [])
  * @method getReportList()
- * @method createNewWordstatReport($param = array())
- * @method deleteWordstatReport($param = array())
- * @method getWordstatReport($param = array())
+ * @method createNewWordstatReport($param = [])
+ * @method deleteWordstatReport($param = [])
+ * @method getWordstatReport($param = [])
  * @method getWordstatReportList()
- * @method createNewForecast($param = array())
- * @method deleteForecastReport($param = array())
- * @method getForecast($param = array())
+ * @method createNewForecast($param = [])
+ * @method deleteForecastReport($param = [])
+ * @method getForecast($param = [])
  * @method getForecastList()
  *
- * @method createNewSubclient($params = array())
- * @method getClientInfo($param = array())
- * @method getClientsList($param = array())
- * @method getClientsUnits($param = array())
- * @method getSubClients($param = array())
- * @method updateClientInfo($param = array())
+ * @method createNewSubclient($params = [])
+ * @method getClientInfo($param = [])
+ * @method getClientsList($param = [])
+ * @method getClientsUnits($param = [])
+ * @method getSubClients($param = [])
+ * @method updateClientInfo($param = [])
  *
  * @method getAvailableVersions()
- * @method getChanges($param = array())
+ * @method getChanges($param = [])
  * @method getRegions()
  * @method getRubrics()
- * @method getStatGoals($param = array())
+ * @method getStatGoals($param = [])
  * @method getTimeZones()
  * @method getVersion()
  * @method pingAPI()
  */
 class DirectApi extends Component
 {
+
+    /**
+     * @var string
+     */
+    public $cachePrefix = '_directApi';
 
     /**
      * Id приложения
@@ -123,6 +129,12 @@ class DirectApi extends Component
     private $_data;
 
     /**
+     * Здесь хранится дополнительный массив результатов запроса
+     * @var array
+     */
+    private $_result;
+
+    /**
      * Здесь хранится код ошибки, если она произошла
      * @var string
      */
@@ -152,14 +164,30 @@ class DirectApi extends Component
      */
     private $debug = 0;
 
+    /**
+     * Переменная для хранения времени при отладке
+     * @var int
+     */
     private $time;
+
+    /**
+     * Включить кеш ?
+     * @var boolean
+     */
+    private $_cache = false;
+
+    /**
+     * Время кеширования, секунд
+     * @var int
+     */
+    private $cachingDuration = 300;
 
     /**
      * Curl
      * @var Curl
      */
     private $_ch;
-    private $_curlOptions = array(
+    private $_curlOptions = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_AUTOREFERER => true,
@@ -168,7 +196,7 @@ class DirectApi extends Component
         CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:5.0) Gecko/20110619 Firefox/5.0',
         CURLOPT_TIMEOUT => 0,
         CURLOPT_POST => true,
-    );
+    ];
 
     /**
      * URL подключение к API. Либо боевой, либо песочница
@@ -191,10 +219,10 @@ class DirectApi extends Component
         curl_setopt($this->_ch, CURLOPT_URL, $this->_apiUrl);
 
         # Установим строку для авторизации
-        $this->_authorizeLink = self::AUTHORIZE_URL . '?' . http_build_query(array(
+        $this->_authorizeLink = self::AUTHORIZE_URL . '?' . http_build_query([
                 'response_type' => $this->responseType,
                 'client_id' => $this->clientId,
-            ));
+            ]);
 
         # Если язык не установлен, тогда возьмем его из установок приложения
         if (!$this->locale) {
@@ -224,14 +252,14 @@ class DirectApi extends Component
         $this->clearErrors();
         $this->_code = $code;
 
-        $result = Yii::$app->curl->post(self::TOKEN_URL, array(
+        $result = Yii::$app->curl->post(self::TOKEN_URL, [
             'grant_type' => 'authorization_code',
             'code' => $this->_code,
             'client_id' => $this->clientId,
             'client_secret' => $this->clientSecret
-        ));
+        ]);
 
-        $result = json_decode($result);
+        $result = Json::decode($result);
 
         # Если все прошло без ошибки
         if (empty($result->error)) {
@@ -244,9 +272,34 @@ class DirectApi extends Component
     }
 
     /**
+     * Включение кеша
+     * @param string $token
+     * @return DirectApi
+     */
+    public function cache($cachingDuration = null)
+    {
+        $this->_cache = true;
+        $cachingDuration ? $this->cachingDuration = $cachingDuration : '';
+        return $this;
+    }
+
+    /**
+     * @param $key
+     * @return array
+     */
+    protected function getCacheKey($key)
+    {
+        return [
+            __CLASS__,
+            $this->cachePrefix,
+            $key
+        ];
+    }
+
+    /**
      * Установка токена
      * @param string $token
-     * @return YiiDirectApi
+     * @return DirectApi
      */
     public function setToken($token)
     {
@@ -284,6 +337,26 @@ class DirectApi extends Component
     }
 
     /**
+     * Получение результатов
+     * return null|array
+     */
+    public function getResult()
+    {
+        return $this->_data;
+    }
+
+    /**
+     * Установка результатов
+     * @param $result
+     * @return $this
+     */
+    public function setResult($result)
+    {
+        $this->_result = $result;
+        return $this;
+    }
+
+    /**
      * Получение ошибки
      * return null|string
      */
@@ -315,7 +388,7 @@ class DirectApi extends Component
     /**
      * Установка логина пользователя, с которым будем работать
      * @param $login
-     * @return YiiDirectApi
+     * @return DirectApi
      */
     public function setLogin($login)
     {
@@ -365,6 +438,27 @@ class DirectApi extends Component
     }
 
     /**
+     * Очистка информации
+     * @return $this
+     */
+    public function clearData()
+    {
+        $this->_data = null;
+        return $this;
+    }
+
+    /**
+     * Очистка
+     * @return $this
+     */
+    public function clear()
+    {
+        $this->clearErrors();
+        $this->clearData();
+        return $this;
+    }
+
+    /**
      * Выполняем запрос
      * @return array
      */
@@ -385,33 +479,50 @@ class DirectApi extends Component
      * @param array $params
      * @return bool|array
      */
-    public function apiQuery($method, $params = array())
+    public function apiQuery($method, $params = [])
     {
-        $this->clearErrors();
-        $params = array(
+        $this->clear();
+        $param = [
             'method' => $method,
             'param' => $params,
             'locale' => $this->locale,
             'application_id' => $this->clientId,
             'token' => $this->_token
-        );
-        $params = $this->utf8($params);
-        $params = json_encode($params);
+        ];
+
+        $param = $this->utf8($param);
+        $param = Json::encode($param);
 
         if ((int)$this->debug == 1)
             $this->time = microtime(true);
 
-        $result = $this->_execCurl($params);
-        $result = json_decode($result);
+        if ($this->_cache) {
+            $cacheKey = $this->getCacheKey($param);
+            $result = Yii::$app->cache->get($cacheKey);
+            if ($result === false) {
+                $result = $this->_execCurl($param);
+                $result = Json::decode($result);
+
+                Yii::$app->cache->set(
+                    $cacheKey,
+                    $result,
+                    $this->cachingDuration
+                );
+            }
+        } else {
+            $result = $this->_execCurl($param);
+            $result = Json::decode($result);
+        }
 
         if (!$result) {
-            $error = 'Не удается открыть адрес: ' . $this->getApiUrl() . ". (" . $params . ')' . ' Логин: ' . $this->getLogin();
+            $error = 'Не удается открыть адрес: ' . $this->getApiUrl() . ". (" . $method . Json::encode($params) . ')' . ' Логин: ' . $this->getLogin();
             throw new \Exception($error);
         } else if (!empty($result)) {
-            if (isset($result->error_code) && isset($result->error_str)) {
-                $this->setError($result->error_code)->setErrorStr($result->error_str);
-                if ($result->error_str != 'Нет статистики для данной кампании' && in_array($result->error_code, [53, 54, 58, 510, 251, 513])) {
+            if (isset($result['error_code']) && isset($result['error_str'])) {
+                $this->setError($result['error_code'])->setErrorStr($result['error_str']);
+                if ($this->getErrorStr() != 'Нет статистики для данной кампании' && in_array($this->getError(), [53, 54, 58, 510, 251, 513])) {
                     $error = "Запрос {$method}: " . $this->ErrorFull . (!empty($this->login) ? ' ' . $this->login . '.' : '');
+                    $error .= $method . Json::encode($params);
                     throw new \Exception($error);
                 }
                 $result = false;
@@ -423,9 +534,11 @@ class DirectApi extends Component
             throw new \Exception($error);
         }
 
-        $this->setData($result->data);
+        $this->setData($result['data']);
+        unset($result['data']);
+        $this->setResult($result);
 
-        return $result;
+        return $this;
     }
 
     /**
@@ -453,7 +566,7 @@ class DirectApi extends Component
      */
     public function __call($method, $args)
     {
-        $params = empty($args) ? array() : $args[0];
+        $params = empty($args) ? [] : $args[0];
         return $this->apiQuery(ucfirst($method), $params);
     }
 }
